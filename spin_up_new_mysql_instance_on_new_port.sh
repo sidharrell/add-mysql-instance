@@ -21,6 +21,7 @@ then
   mkdir /var/lib/mysql${ID}
   chown mysql. /var/lib/mysql${ID}
   mysql_install_db --user=mysql --basedir=/usr --datadir=/var/lib/mysql${ID}
+  systemctl enable mysql${ID}
   systemctl start mysql${ID}
   exit 0;
 else
