@@ -269,9 +269,9 @@ then
     then
       if [[ $gtidpos = *[!\ ]*  ]]
       then
-        MASTER_POSITION="master_use_gtid=current_pos"
-      else
         MASTER_POSITION="master_use_gtid=slave_pos"
+      else
+        MASTER_POSITION="master_use_gtid=current_pos"
       fi
     else
       MASTER_POSTION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
