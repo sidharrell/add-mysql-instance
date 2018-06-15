@@ -75,7 +75,7 @@ if [[ $BYPASS == "Y" || $REPLY =~ ^[Yy]$ ]]
 then
   if [ -z "$TARGET" ]
   then
-    ip a | grep inet | cut -d "/" -f1
+    ip a | grep inet | grep -v inet6 | cut -d "/" -f1
     echo "Choose the ip address from above that is a fixed ip address on this server in the internal, private subnet for use inside the customer environment. "
     read -p "What is your choice? " -r
     echo    # (optional) move to a new line
@@ -215,41 +215,80 @@ then
   sleep 10; #needed to let the files finish writing before the next step
   su -s/bin/bash - mysql -c "innobackupex --apply-log /var/lib/mysql$INSTANCEID/"
   ./ssh-expect $pass scp $user@$doner:~/output.txt ./
+  echo
+  echo "getting the binlog on $doner"
   filename=`grep "MySQL binlog position" output.txt | cut -d"'" -f2`
+  echo
+  echo "getting the binlog position on $doner"
   position=`grep "MySQL binlog position" output.txt | cut -d"'" -f4`
+  echo
+  echo "getting the gtid binlog position on $doner"
   ./ssh-expect $pass ssh -t $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"select binlog_gtid_pos('$filename', $position);\" > gtid.out"
   ./ssh-expect $pass scp $user@$doner:~/gtid.out ./
   gtidpos=`tail -n1 gtid.out`
   password=`pwgen 13 1`
   systemctl start mysql$INSTANCEID
-  if [[ $ssl == "Y" ]];
+  if [[ $ssl =~ [Yy] ]];
   then
     REQUIRE_SSL= " REQUIRE SSL"
     MASTER_SSL=", MASTER_SSL=1"
   fi
-  if [[ $gtid == "Y" ]];
+  if [[ $gtid =~ [Yy] ]];
   then
     MASTER_POSITION="master_use_gtid=slave_pos"
   else
     MASTER_POSTION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
   fi
+  echo
+  echo "adding the grant for the replication user on $doner"
   ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$slave' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;\""
+  echo
+  echo "setting the gtid_slave_pos on $slave"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "SET GLOBAL gtid_slave_pos = '$gtidpos';"
+  echo
+  echo "setting the slave settings on $slave"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
+  echo
+  echo "starting the slave on $slave"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "start slave;"
-  if [[ $mm == "Y" ]];
+  if [[ $mm =~ [Yy] ]];
   then
+    echo
+    echo "getting the binlog on $slave"
     filename=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep File | awk '{print $2;}'`
+    echo $filename
+    echo
+    echo "getting the binlog postion on $slave"
     position=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep Position | awk '{print $2;}'`
+    echo  "$position"
+    echo
+    echo "getting the current gtid binlog postion on $slave"
     gtidpos=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "select binlog_gtid_pos('$filename', $position)\G" | tail -n1 | cut -d":" -f2`
-    if [[ $gtid == "Y" ]];
+    echo "$gtidpos"
+    if [[ $gtid =~ [Yy] ]];
     then
-      MASTER_POSITION="master_use_gtid=slave_pos"
+      if [[ $gtidpos = *[!\ ]*  ]]
+      then
+        MASTER_POSITION="master_use_gtid=current_pos"
+      else
+        MASTER_POSITION="master_use_gtid=slave_pos"
+      fi
     else
       MASTER_POSTION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
     fi
+    echo
+    echo "adding the grant for the replication user on $slave"
     mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$doner' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;"
-    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"stop slave; SET GLOBAL gtid_slave_pos = '$gtidpos';\""
+    echo
+    echo "stopping the slave on $doner"
+    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"stop slave;\""
+    if [[ $gtidpos = *[!\ ]* ]]
+    then
+      echo "setting the gtid_slave_pos on $doner"
+      ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"SET GLOBAL gtid_slave_pos = '$gtidpos';\""
+    fi
+    echo
+    echo "changing slave settings on $doner"
     ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"CHANGE MASTER TO master_host='$slave', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT; start slave;\""
   fi
   exit 0;
