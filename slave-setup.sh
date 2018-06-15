@@ -150,7 +150,7 @@ then
   else
     mm=$MM
   fi
-  if [ -z "IID" ]
+  if [ -z "$IID" ]
   then
     if [ $(ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n | wc -l) -gt 1 ]; then
       echo "Currently, I see mysql running on more ports than the standard 3306:"
@@ -207,7 +207,7 @@ then
   then
     ./ssh-expect $pass ssh $user@$doner  'innobackupex --binlog-info=ON "${HOME}" --stream=xbstream 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   else
-    MASTER_PORT=", MASTER_PORT=3307"
+    MASTER_PORT=", MASTER_PORT=$INSTANCEID"
     mysqluser=$(grep user ~/.my.cnf | cut -d"=" -f2)
     mysqlpass=$(grep password ~/.my.cnf | cut -d"=" -f2)
     ./ssh-expect $pass ssh $user@$doner 'innobackupex --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysqL'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
@@ -217,7 +217,7 @@ then
   ./ssh-expect $pass scp $user@$doner:~/output.txt ./
   filename=`grep "MySQL binlog position" output.txt | cut -d"'" -f2`
   position=`grep "MySQL binlog position" output.txt | cut -d"'" -f4`
-  ./ssh-expect $pass ssh -t $user@$doner "mysql$INSTANCEID -e \"select binlog_gtid_pos('$filename', $position);\" > gtid.out"
+  ./ssh-expect $pass ssh -t $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"select binlog_gtid_pos('$filename', $position);\" > gtid.out"
   ./ssh-expect $pass scp $user@$doner:~/gtid.out ./
   gtidpos=`tail -n1 gtid.out`
   password=`pwgen 13 1`
