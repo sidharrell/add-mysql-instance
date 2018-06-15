@@ -32,7 +32,7 @@ case $key in
     shift # past value
     ;;
     -u|--user)
-    USER="$2"
+    USR="$2"
     shift # past argument
     shift # past value
     ;;
@@ -43,6 +43,16 @@ case $key in
     ;;
     --gtid)
     GTID="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    -mm|--master-master)
+    MM="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    --iid)
+    IID="$2"
     shift # past argument
     shift # past value
     ;;
@@ -127,12 +137,43 @@ then
   else
     gtid=$GTID
   fi
-  if [ $(ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n | wc -l) -gt 1 ]; then
-    echo "Currently, I see mysql running on more ports than the standard 3306:"
-    ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n
-    read -p "What is the port that the mysql instance that you want to establish replication for? " -r
+  if [ -z "$MM" ]
+  then
+    read -p "Establish replication using the Master-Master pattern?\nReplication will be established from this instance back to the doner: " -r
     echo    # (optional) move to a new line
-    INSTANCEID=$(($REPLY-3305))
+    if [[ $REPLY =~ ^[Yy]$ ]];
+    then
+      if [[ $gtid == "Y" ]]; then  mm="Y"; else echo "The Master-Master pair is currently only available with gtid based replication."; mm="N"; fi
+    else
+      mm="N"
+    fi
+  else
+    mm=$MM
+  fi
+  if [ -z "IID" ]
+  then
+    if [ $(ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n | wc -l) -gt 1 ]; then
+      echo "Currently, I see mysql running on more ports than the standard 3306:"
+      ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n
+      read -p "What is the port that the mysql instance that you want to establish replication for? " -r
+      echo    # (optional) move to a new line
+      if [[ $REPLY != "3306" ]];
+      then
+        INSTANCEID=$(($REPLY-3305))
+      fi
+    else
+      read -p "I do not see mysql running on more than one port. Proceed with establishing replication on the primary instance? " -r
+      echo    # (optional) move to a new line
+      if [[ $REPLY != "Y" && $REPLY != "y" ]];
+      then
+        exit 1;
+      fi
+    fi
+  else
+    if [[ $IID != "3306" ]]
+    then
+      INSTANCEID=$(($IID-3305))
+    fi
   fi
 
   if [ ! -f /etc/yum.repos.d/percona-release.repo ];
@@ -196,6 +237,21 @@ then
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "SET GLOBAL gtid_slave_pos = '$gtidpos';"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "start slave;"
+  if [[ $mm == "Y" ]];
+  then
+    filename=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep File | awk '{print $2;}'`
+    position=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep Position | awk '{print $2;}'`
+    gtidpos=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "select binlog_gtid_pos('$filename', $position)\G" | tail -n1 | cut -d":" -f2`
+    if [[ $gtid == "Y" ]];
+    then
+      MASTER_POSITION="master_use_gtid=slave_pos"
+    else
+      MASTER_POSTION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
+    fi
+    mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$doner' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;"
+    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"stop slave; SET GLOBAL gtid_slave_pos = '$gtidpos';\""
+    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"CHANGE MASTER TO master_host='$slave', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT; start slave;\""
+  fi
   exit 0;
 else
   exit 1;
