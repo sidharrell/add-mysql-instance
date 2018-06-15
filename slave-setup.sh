@@ -1,7 +1,4 @@
-
-
 #~/bin/bash
-
 set -m
 
 POSITIONAL=()
@@ -172,7 +169,7 @@ then
     MASTER_PORT=", MASTER_PORT=3307"
     mysqluser=$(grep user ~/.my.cnf | cut -d"=" -f2)
     mysqlpass=$(grep password ~/.my.cnf | cut -d"=" -f2)
-    ./ssh-expect $pass ssh $user@$doner 'innobackupex --defaults-file=/etc/my${INSTANCEID}.cnf --socket=/var/lib/mysql${INSTANCEID}/mysql.sock --stream=xbstream --user=$mysqluser --password=$mysqlpass /var/lib/mysqL${INSTANCEID} 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
+    ./ssh-expect $pass ssh $user@$doner 'innobackupex --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysqL'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   fi
   sleep 10; #needed to let the files finish writing before the next step
   su -s/bin/bash - mysql -c "innobackupex --apply-log /var/lib/mysql$INSTANCEID/"
@@ -195,10 +192,10 @@ then
   else
     MASTER_POSTION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
   fi
-  ./ssh-expect $pass ssh $user@$doner "mysql$INSTANCEID -e \"GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$slave' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;\""
-  mysql$INSTANCEID -e "SET GLOBAL gtid_slave_pos = '$gtidpos';"
-  mysql$INSTANCEID -e "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
-  mysql$INSTANCEID -e "start slave;"
+  ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$slave' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;\""
+  mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "SET GLOBAL gtid_slave_pos = '$gtidpos';"
+  mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
+  mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "start slave;"
   exit 0;
 else
   exit 1;
