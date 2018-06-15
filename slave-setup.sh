@@ -217,15 +217,15 @@ then
   ./ssh-expect $pass scp $user@$doner:~/output.txt ./
   echo
   echo "getting the binlog on $doner"
-  filename=`grep "MySQL binlog position" output.txt | cut -d"'" -f2`
+  filename=`grep "MySQL binlog position" output.txt | cut -d"'" -f2 | xargs`
   echo
   echo "getting the binlog position on $doner"
-  position=`grep "MySQL binlog position" output.txt | cut -d"'" -f4`
+  position=`grep "MySQL binlog position" output.txt | cut -d"'" -f4 | xargs`
   echo
   echo "getting the gtid binlog position on $doner"
   ./ssh-expect $pass ssh -t $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"select binlog_gtid_pos('$filename', $position);\" > gtid.out"
   ./ssh-expect $pass scp $user@$doner:~/gtid.out ./
-  gtidpos=`tail -n1 gtid.out`
+  gtidpos=`tail -n1 gtid.out | xargs`
   password=`pwgen 13 1`
   systemctl start mysql$INSTANCEID
   if [[ $ssl =~ [Yy] ]];
@@ -255,15 +255,15 @@ then
   then
     echo
     echo "getting the binlog on $slave"
-    filename=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep File | awk '{print $2;}'`
+    filename=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep File | awk '{print $2;}' | xargs`
     echo $filename
     echo
     echo "getting the binlog postion on $slave"
-    position=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep Position | awk '{print $2;}'`
+    position=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "show master status\G" | grep Position | awk '{print $2;}' | xargs`
     echo  "$position"
     echo
     echo "getting the current gtid binlog postion on $slave"
-    gtidpos=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "select binlog_gtid_pos('$filename', $position)\G" | tail -n1 | cut -d":" -f2`
+    gtidpos=`mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "select binlog_gtid_pos('$filename', $position)\G" | tail -n1 | cut -d":" -f2 | xargs`
     echo "$gtidpos"
     if [[ $gtid =~ [Yy] ]];
     then
