@@ -208,9 +208,9 @@ then
     ./ssh-expect $pass ssh $user@$doner  'innobackupex --binlog-info=ON "${HOME}" --stream=xbstream 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   else
     MASTER_PORT=", MASTER_PORT=$INSTANCEID"
-    mysqluser=$(grep user ~/.my.cnf | cut -d"=" -f2)
-    mysqlpass=$(grep password ~/.my.cnf | cut -d"=" -f2)
-    ./ssh-expect $pass ssh $user@$doner 'innobackupex --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysqL'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
+    mysqluser=$(grep user ~/.my.cnf | cut -d"=" -f2 | xargs)
+    mysqlpass=$(grep password ~/.my.cnf | cut -d"=" -f2 | xargs)
+    ./ssh-expect $pass ssh $user@$doner 'innobackupex --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysql'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   fi
   sleep 10; #needed to let the files finish writing before the next step
   su -s/bin/bash - mysql -c "innobackupex --apply-log /var/lib/mysql$INSTANCEID/"
