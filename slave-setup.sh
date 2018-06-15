@@ -159,7 +159,7 @@ then
       echo    # (optional) move to a new line
       if [[ $REPLY != "3306" ]];
       then
-        INSTANCEID=$(($REPLY-3305))
+        INSTANCEID=$REPLY
       fi
     else
       read -p "I do not see mysql running on more than one port. Proceed with establishing replication on the primary instance? " -r
@@ -172,7 +172,7 @@ then
   else
     if [[ $IID != "3306" ]]
     then
-      INSTANCEID=$(($IID-3305))
+      INSTANCEID=$IID
     fi
   fi
 

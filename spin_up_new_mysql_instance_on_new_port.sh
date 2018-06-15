@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "Currently, I see mysql running on ports:"
 ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n
-ID=$((`ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n | tail -n1`-3304))
+ID=$((`ss -tulpen | grep mysql | awk '{print $5;}' | cut -d":" -f 4 | sort -n | tail -n1`+1))
 echo; echo "Are you trying to spin up instance #$ID on port $(($ID+3305))?"
 echo "Speak now, or clean up after me later."
 if [[ $BYPASS != "Y" ]]
