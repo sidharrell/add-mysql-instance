@@ -1,0 +1,9 @@
+[mysqld]
+skip-slave-start
+server-id = 1
+expire_logs_days=4
+auto-increment-increment=5
+auto-increment-offset=1
+log-bin = db01-bin.log
+log-slave-updates
+binlog_format=ROW
