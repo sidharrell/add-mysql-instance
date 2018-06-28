@@ -143,7 +143,7 @@ then
     echo    # (optional) move to a new line
     if [[ $REPLY =~ ^[Yy]$ ]];
     then
-      if [[ $gtid == "Y" ]]; then  mm="Y"; else echo "The Master-Master pair is currently only available with gtid based replication."; mm="N"; fi
+      mm="Y";
     else
       mm="N"
     fi
@@ -237,7 +237,7 @@ then
   then
     MASTER_POSITION="master_use_gtid=slave_pos"
   else
-    MASTER_POSTION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
+    MASTER_POSITION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
   fi
   echo
   echo "adding the grant for the replication user on $doner"
@@ -247,6 +247,7 @@ then
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "SET GLOBAL gtid_slave_pos = '$gtidpos';"
   echo
   echo "setting the slave settings on $slave"
+  echo "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
   echo
   echo "starting the slave on $slave"
