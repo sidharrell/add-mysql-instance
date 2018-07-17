@@ -230,7 +230,7 @@ then
   systemctl start mysql$INSTANCEID
   if [[ $ssl =~ [Yy] ]];
   then
-    REQUIRE_SSL= " REQUIRE SSL"
+    REQUIRE_SSL=" REQUIRE SSL"
     MASTER_SSL=", MASTER_SSL=1"
   fi
   if [[ $gtid =~ [Yy] ]];
