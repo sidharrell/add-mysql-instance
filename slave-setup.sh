@@ -176,44 +176,20 @@ then
     fi
   fi
 
-  if [ ! -f /etc/yum.repos.d/percona-release.repo ];
-  then
-    echo -e 'percona repo : \e[1m\e[31mNOT INSTALLED\e[0m' && yum install http://www.percona.com/downloads/percona-release/redhat/0.1-4/percona-release-0.1-4.noarch.rpm -y;
-  fi && if [ $(which innobackupex) ];
-  then
-    echo -e 'innobackupex : \e[1m\e[32mINSTALLED\e[0m';
-  else
-    echo -e 'innobackupex : \e[1m\e[31mNOT INSTALLED\e[0m' && /usr/bin/yum install percona-xtrabackup -y;
-  fi && if [ $(which nc) ];
-  then
-    echo -e 'nc : \e[1m\e[32mINSTALLED\e[0m';
-  else
-    echo -e 'nc : \e[1m\e[31mNOT INSTALLED\e[0m' && /usr/bin/yum install nc -y;
-  fi && if [ $(which pv) ];
-  then
-    echo -e 'pv : \e[1m\e[32mINSTALLED\e[0m';
-  else
-    echo -e 'pv : \e[1m\e[31mNOT INSTALLED\e[0m' && /usr/bin/yum install pv -y;
-  fi && if [ $(which expect) ];
-  then
-    echo -e 'expect : \e[1m\e[32mINSTALLED\e[0m';
-  else
-    echo -e 'expect : \e[1m\e[31mNOT INSTALLED\e[0m' && /usr/bin/yum install expect -y;
-  fi
   systemctl stop mysql$INSTANCEID;
   rm -rf /var/lib/mysql$INSTANCEID/*
   su -s/bin/bash - mysql -c "cd /var/lib/mysql$INSTANCEID/; nc -l $PORT | pv | xbstream -x ./" &
   if [ -z "$INSTANCEID" ];
   then
-    ./ssh-expect $pass ssh $user@$doner  'innobackupex --binlog-info=ON "${HOME}" --stream=xbstream 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
+    ./ssh-expect $pass ssh $user@$doner  'mariabackup --binlog-info=ON --backup --stream=xbstream 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   else
     MASTER_PORT=", MASTER_PORT=$INSTANCEID"
     mysqluser=$(grep user ~/.my.cnf | cut -d"=" -f2 | xargs)
     mysqlpass=$(grep password ~/.my.cnf | cut -d"=" -f2 | xargs)
-    ./ssh-expect $pass ssh $user@$doner 'innobackupex --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysql'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
+    ./ssh-expect $pass ssh $user@$doner 'mariabackup --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysql'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   fi
   sleep 10; #needed to let the files finish writing before the next step
-  su -s/bin/bash - mysql -c "innobackupex --apply-log /var/lib/mysql$INSTANCEID/"
+  su -s/bin/bash - mysql -c "mariabackup --apply-log /var/lib/mysql$INSTANCEID/"
   ./ssh-expect $pass scp $user@$doner:~/output.txt ./
   echo
   echo "getting the binlog on $doner"
