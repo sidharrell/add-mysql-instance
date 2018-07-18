@@ -181,8 +181,9 @@ then
     read -p "PROTIP: This is especially important when setting up master-secondmaster links. (y/n) "
     if [[ $REPLY =~ ^[Yy]$ ]];
     then
-    read -p "What is the existing repl user password? "
-    password=$REPLY
+      read -p "What is the existing repl user password? "
+      password=$REPLY
+    fi
   fi
   if [ -z "$IID" ]
   then
