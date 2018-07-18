@@ -51,10 +51,20 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    -msm|--master-secondmaster)
+    MSM="$2"
+    shift # past argument
+    shift # past value
+    ;;
     --iid)
     IID="$2"
     shift # past argument
     shift # past value
+    ;;
+    --repl-password)
+    password="$2"
+    shift
+    shift
     ;;
     *)    # unknown option
     POSITIONAL+=("$1") # save it in an array for later
@@ -139,7 +149,8 @@ then
   fi
   if [ -z "$MM" ]
   then
-    read -p "Establish replication using the Master-Master pattern?\nReplication will be established from this instance back to the doner: " -r
+    echo "Establish replication using the Master-Master pattern?"
+    read -p "Replication will be established from this instance back to the doner: " -r
     echo    # (optional) move to a new line
     if [[ $REPLY =~ ^[Yy]$ ]];
     then
@@ -149,6 +160,29 @@ then
     fi
   else
     mm=$MM
+  fi
+  if [ -z "$MSM" ]
+  then
+    echo "Establish replication using the Master-SecondMaster pattern?"
+    read -p "Replication will be established from this instance back to the doner: " -r
+    echo    # (optional) move to a new line
+    if [[ $REPLY =~ ^[Yy]$ ]];
+    then
+      msm="Y";
+    else
+      msm="N"
+    fi
+  else
+    msm=$MM
+  fi
+  if [ -z "$password" ]
+  then
+    echo "Do you want to enter an existing password for the replication user, to prevent the breakage of existing links?"
+    read -p "PROTIP: This is especially important when setting up master-secondmaster links. (y/n) "
+    if [[ $REPLY =~ ^[Yy]$ ]];
+    then
+    read -p "What is the existing repl user password? "
+    password=$REPLY
   fi
   if [ -z "$IID" ]
   then
@@ -162,7 +196,8 @@ then
         INSTANCEID=$REPLY
       fi
     else
-      read -p "I do not see mysql running on more than one port. Proceed with establishing replication on the primary instance? " -r
+      echo "I do not see mysql running on more than one port."
+      read -p "Proceed with establishing replication on the primary instance? " -r
       echo    # (optional) move to a new line
       if [[ $REPLY != "Y" && $REPLY != "y" ]];
       then
@@ -227,7 +262,10 @@ then
   ./ssh-expect $pass ssh -t $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"select binlog_gtid_pos('$filename', $position);\" > gtid.out"
   ./ssh-expect $pass scp $user@$doner:~/gtid.out ./
   gtidpos=`tail -n1 gtid.out | xargs`
-  password=`pwgen 13 1`
+  if [ -z "$password" ]
+  then
+    password=`pwgen 13 1`
+  fi
   systemctl start mysql$INSTANCEID
   if [[ $ssl =~ [Yy] ]];
   then
@@ -293,8 +331,19 @@ then
     echo "changing slave settings on $doner"
     ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"CHANGE MASTER TO master_host='$slave', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT; start slave;\""
   fi
+  if [[ $msm =~ [Yy] ]];
+  then
+    echo
+    echo "adding the grant for the replication user on $slave"
+    mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$doner' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;"
+    echo
+    echo "stopping the slave on $doner"
+    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"stop slave 'secondmaster';\""
+    echo
+    echo "changing slave settings on $doner"
+    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"CHANGE MASTER 'secondmaster' TO master_host='$slave', master_user='repl', MASTER_PASSWORD='$password', master_use_gtid=slave_pos $MASTER_SSL $MASTER_PORT; start slave 'secondmaster';\""
+  fi
   exit 0;
 else
   exit 1;
 fi
-
