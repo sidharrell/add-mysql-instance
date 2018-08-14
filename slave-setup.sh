@@ -89,15 +89,15 @@ then
   fi
   if [ -z "$SOURCE" ]
   then
-    read -p "What is the corresponding ip address of the doner? " -r
+    read -p "What is the corresponding ip address of the donor? " -r
     echo    # (optional) move to a new line
-    doner=$REPLY
+    donor=$REPLY
   else
-    doner=$SOURCE
+    donor=$SOURCE
   fi
   if [ -z "$USR" ]
   then
-    read -p "What is the user to log in as on the doner? " -r
+    read -p "What is the user to log in as on the donor? " -r
     echo    # (optional) move to a new line
     user=$REPLY
   else
@@ -105,7 +105,7 @@ then
   fi
   if [ -z "$PASSWORD" ]
   then
-    read -p "What is the password of the $user user on the doner? " -r
+    read -p "What is the password of the $user user on the donor? " -r
     echo    # (optional) move to a new line
     pass=$REPLY
   else
@@ -139,7 +139,7 @@ then
   fi
   if [ -z "$MM" ]
   then
-    read -p "Establish replication using the Master-Master pattern?\nReplication will be established from this instance back to the doner: " -r
+    read -p "Establish replication using the Master-Master pattern?\nReplication will be established from this instance back to the donor: " -r
     echo    # (optional) move to a new line
     if [[ $REPLY =~ ^[Yy]$ ]];
     then
@@ -210,21 +210,21 @@ then
     MASTER_PORT=", MASTER_PORT=$INSTANCEID"
     mysqluser=$(grep user ~/.my.cnf | cut -d"=" -f2 | xargs)
     mysqlpass=$(grep password ~/.my.cnf | cut -d"=" -f2 | xargs)
-    ./ssh-expect $pass ssh $user@$doner 'innobackupex --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysql'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
+    ./ssh-expect $pass ssh $user@$donor 'innobackupex --defaults-file=/etc/my'"$INSTANCEID"'.cnf --socket=/var/lib/mysql'"$INSTANCEID"'/mysql.sock --stream=xbstream --user='"$mysqluser"' --password='"$mysqlpass"' /var/lib/mysql'"$INSTANCEID"' 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   fi
   sleep 10; #needed to let the files finish writing before the next step
   su -s/bin/bash - mysql -c "innobackupex --apply-log /var/lib/mysql$INSTANCEID/"
-  ./ssh-expect $pass scp $user@$doner:~/output.txt ./
+  ./ssh-expect $pass scp $user@$donor:~/output.txt ./
   echo
-  echo "getting the binlog on $doner"
+  echo "getting the binlog on $donor"
   filename=`grep "MySQL binlog position" output.txt | cut -d"'" -f2 | xargs`
   echo
-  echo "getting the binlog position on $doner"
+  echo "getting the binlog position on $donor"
   position=`grep "MySQL binlog position" output.txt | cut -d"'" -f4 | xargs`
   echo
-  echo "getting the gtid binlog position on $doner"
-  ./ssh-expect $pass ssh -t $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"select binlog_gtid_pos('$filename', $position);\" > gtid.out"
-  ./ssh-expect $pass scp $user@$doner:~/gtid.out ./
+  echo "getting the gtid binlog position on $donor"
+  ./ssh-expect $pass ssh -t $user@$donor "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"select binlog_gtid_pos('$filename', $position);\" > gtid.out"
+  ./ssh-expect $pass scp $user@$donor:~/gtid.out ./
   gtidpos=`tail -n1 gtid.out | xargs`
   password=`pwgen 13 1`
   systemctl start mysql$INSTANCEID
@@ -241,14 +241,14 @@ then
   fi
   echo
   echo "adding the grant for the replication user on $doner"
-  ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$slave' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;\""
+  ./ssh-expect $pass ssh $user@$donor "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$slave' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;\""
   echo
   echo "setting the gtid_slave_pos on $slave"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "SET GLOBAL gtid_slave_pos = '$gtidpos';"
   echo
   echo "setting the slave settings on $slave"
-  echo "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
-  mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "CHANGE MASTER TO master_host='$doner', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
+  echo "CHANGE MASTER TO master_host='$donor', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
+  mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "CHANGE MASTER TO master_host='$donor', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT;"
   echo
   echo "starting the slave on $slave"
   mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "start slave;"
@@ -279,18 +279,18 @@ then
     fi
     echo
     echo "adding the grant for the replication user on $slave"
-    mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$doner' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;"
+    mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$donor' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;"
     echo
-    echo "stopping the slave on $doner"
-    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"stop slave;\""
+    echo "stopping the slave on $donor"
+    ./ssh-expect $pass ssh $user@$donor "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"stop slave;\""
     if [[ $gtidpos = *[!\ ]* ]]
     then
-      echo "setting the gtid_slave_pos on $doner"
-      ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"SET GLOBAL gtid_slave_pos = '$gtidpos';\""
+      echo "setting the gtid_slave_pos on $donor"
+      ./ssh-expect $pass ssh $user@$donor "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"SET GLOBAL gtid_slave_pos = '$gtidpos';\""
     fi
     echo
-    echo "changing slave settings on $doner"
-    ./ssh-expect $pass ssh $user@$doner "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"CHANGE MASTER TO master_host='$slave', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT; start slave;\""
+    echo "changing slave settings on $donor"
+    ./ssh-expect $pass ssh $user@$donor "mysql --socket=/var/lib/mysql$INSTANCEID/mysql.sock -e \"CHANGE MASTER TO master_host='$slave', master_user='repl', MASTER_PASSWORD='$password', $MASTER_POSITION $MASTER_SSL $MASTER_PORT; start slave;\""
   fi
   exit 0;
 else
