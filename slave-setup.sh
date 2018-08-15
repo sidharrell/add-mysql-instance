@@ -205,7 +205,7 @@ then
   su -s/bin/bash - mysql -c "cd /var/lib/mysql$INSTANCEID/; nc -l $PORT | pv | xbstream -x ./" &
   if [ -z "$INSTANCEID" ];
   then
-    ./ssh-expect $pass ssh $user@$doner  'innobackupex --binlog-info=ON "${HOME}" --stream=xbstream 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
+    ./ssh-expect $pass ssh $user@$donor  'innobackupex --binlog-info=ON "${HOME}" --stream=xbstream 2>output.txt | nc -w 60 '"$slave"' '"$PORT"
   else
     MASTER_PORT=", MASTER_PORT=$INSTANCEID"
     mysqluser=$(grep user ~/.my.cnf | cut -d"=" -f2 | xargs)
@@ -240,7 +240,7 @@ then
     MASTER_POSITION="MASTER_LOG_FILE='$filename', MASTER_LOG_POS=$position"
   fi
   echo
-  echo "adding the grant for the replication user on $doner"
+  echo "adding the grant for the replication user on $donor"
   ./ssh-expect $pass ssh $user@$donor "mysql --socket=/var/lib/mysql${INSTANCEID}/mysql.sock -e \"GRANT REPLICATION SLAVE ON *.* TO 'repl'@'$slave' identified by '$password'$REQUIRE_SSL; FLUSH PRIVILEGES;\""
   echo
   echo "setting the gtid_slave_pos on $slave"
